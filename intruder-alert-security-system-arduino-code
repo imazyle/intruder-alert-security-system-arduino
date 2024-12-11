@@ -1,0 +1,133 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // LCD configuration 
+
+const int button_inc = 2;
+const int button_dec = 3;
+const int trigger_pin = 8;  // Ultrasonic sensor trigger pin
+const int echo_pin = 9;     // Ultrasonic sensor echo pin 
+const int piezo_buzz = 4;
+const int led_red = 5;
+const int led_green = 6;
+
+int allowed_distance = 100;  // Initial distance set to 1 meter
+int min_distance = 10;
+int max_distance = 330;
+bool system_ready = false;
+
+void setup() {
+  // Initialize components and pins
+  pinMode(button_inc, INPUT_PULLUP);
+  pinMode(button_dec, INPUT_PULLUP);
+  pinMode(trigger_pin, OUTPUT);
+  pinMode(echo_pin, INPUT);
+  pinMode(piezo_buzz, OUTPUT);
+  pinMode(led_red, OUTPUT);
+  pinMode(led_green, OUTPUT);
+
+  Serial.begin(9600);
+
+  // Initialize the LCD
+  lcd.init();
+  lcd.clear();
+  lcd.backlight();
+  display_system_ready();
+  delay(2000);
+}
+
+void loop() {
+  // Ultrasonic sensor distance measurement
+  int distance = measure_distance();
+
+  // Display allowed distance on LCD
+  display_allowed_distance();
+
+  // Button handling to adjust allowed distance
+  handle_buttons();
+
+  // Check if object is within the allowed distance
+  check_intrusion(distance);
+}
+
+void handle_buttons() {
+  // Increase allowed distance
+  if (digitalRead(button_inc) == LOW && allowed_distance < max_distance) {
+    allowed_distance += 10;
+  }
+
+  // Decrease allowed distance
+  if (digitalRead(button_dec) == LOW && allowed_distance > min_distance) {
+    allowed_distance -= 10;
+  }
+}
+
+int measure_distance() {
+  // Trigger ultrasonic sensor
+  digitalWrite(trigger_pin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigger_pin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigger_pin, LOW);
+
+  // Measure the echo duration to calculate distance
+  long duration = pulseIn(echo_pin, HIGH);
+  return duration * 0.0343 / 2;
+}
+
+void display_system_ready() {
+  lcd.setCursor(0, 0);
+  lcd.print("Intruder Alarm");
+  lcd.setCursor(0, 1);
+  lcd.print("System Ready");
+  system_ready = true;
+}
+
+void display_allowed_distance() {
+  lcd.setCursor(0, 0);
+  lcd.print("Distance: ");
+
+  if (allowed_distance < 100) {
+    lcd.print(" ");  // Add a leading space for two-digit numbers
+  }
+  lcd.print(allowed_distance);
+
+  for (int i = 0; i < 16 - int(log10(abs(allowed_distance))) - 11; ++i) {
+    lcd.print(" ");
+  }
+  
+  lcd.setCursor(0, 1);
+  lcd.print("             ");
+  Serial.print("Distance: ");
+  Serial.print(allowed_distance);
+  Serial.print("\n");
+  delay(300);
+}
+
+void check_intrusion(int distance) {
+  // Check if object is within the allowed distance
+  if (distance < allowed_distance) {
+    // Intrusion detected
+    for (int i = 0; i < 16 - int(log10(abs(allowed_distance))); ++i) {
+      lcd.print(" ");
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("Intruder Alert!");
+    lcd.setCursor(0, 1);
+    lcd.print("Distance: ");
+    lcd.print(distance);
+    for (int i = 0; i < 16 - int(log10(abs(allowed_distance))); ++i) {
+      lcd.print(" ");
+    }
+    digitalWrite(piezo_buzz, HIGH);
+    digitalWrite(led_red, HIGH);
+    digitalWrite(led_green, LOW);
+  } else {
+    // No intrusion
+    display_allowed_distance();
+    digitalWrite(piezo_buzz, LOW);
+    digitalWrite(led_red, LOW);
+    digitalWrite(led_green, HIGH);
+  }
+  delay(500);
+}
